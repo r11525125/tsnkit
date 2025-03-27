@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # tsnkit
 
 A scheduling and benchmark toolkit for Time-Sensitive Networking in Python
@@ -67,3 +68,6 @@ python3 -m tsnkit.models.[METHOD] [STREAM PATH] [NETWORK PATH]
 Contributions are welcome! Feel free to add your own scheduling algorithm in this toolkit. And contact me to update your new scheduling method into our benchmark paper!
 
 *Refer to `src/tsnkit/models/__init__.py` to implement the required interface and benchmark entrance.*
+=======
+A simple scheduling toolkit for time-sensitive network in Python
+>>>>>>> 1177fd7 (Initial commit)
