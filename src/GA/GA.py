@@ -80,25 +80,24 @@ def FindET(task, GCL, path, start_time_option=None):
         return -1
 
 
-def Scheduler(task, start_time_choice, selected_path_index):
+def Scheduler(task, start_time_choices):
     global GCL, OFFSET, ARVT
-    # 选定的路径
-    selected_path = task_attr[task]['paths'][selected_path_index]  # 使用选定的路径索引选择路径
-    
     task_var[task]['arr'] = 0
-    # 使用选定的路径和起始时间选项进行调度
-    IT = FindET(task, GCL, selected_path, start_time_choice)
+    selected_path_index = 0  # 假设我们总是选择第一条路径，这个逻辑可以根据需要进行调整
+    r = task_attr[task]['paths'][selected_path_index]  # 选择一条路径
+    start_time_option = start_time_choices[task]  # 从start_time_choices中获取这个任务的开始时间选项
+    IT = FindET(task, GCL, r, start_time_option)  # 使用FindET函数和指定的开始时间选项
     if IT == -1:
         return False  # 如果没有找到可行的开始时间，返回False
 
-    arr = (len(selected_path) - 1) * (t_proc_max + task_attr[task]['t_trans'])
+    arr = (len(r) - 1) * (t_proc_max + task_attr[task]['t_trans'])
     task_var[task]['arr'] = arr
     task_var[task]['IT'] = IT
-    task_var[task]['r'] = selected_path
+    task_var[task]['r'] = r
 
     _last_hop_end = IT
-    for i, v in enumerate(selected_path[:-1]):
-        link = str((v, selected_path[i + 1]))
+    for i, v in enumerate(r[:-1]):
+        link = str((v, r[i + 1]))
         _current_hop_start = _last_hop_end
         _last_hop_end = _current_hop_start + t_proc_max + task_attr[task]['t_trans']
         for alpha in range(0, int(LCM / task_attr[task]['period'])):
@@ -106,136 +105,110 @@ def Scheduler(task, start_time_choice, selected_path_index):
 
         if i == 0:
             OFFSET[task] = _current_hop_start
-        if i == len(selected_path) - 2:
+        if i == len(r) - 2:
             ARVT[task] = _last_hop_end - t_proc_max
 
     return True
 
 
-
 def GA(task_path, net_path, piid, config_path="./", workers=1):
     try:
         global GCL, OFFSET, ARVT, task_var, task_attr, net_attr, LCM, t_proc_max
-        net, net_attr, _, _, link_to_index, _, _, _, rate = utils.read_network(net_path, utils.t_slot)
+        net, net_attr, _, _, link_to_index, _, _, _, rate = utils.read_network(
+            net_path, utils.t_slot)
         task_attr, LCM = utils.read_task(task_path, utils.t_slot, net, rate)
-        t_proc_max = max(net_attr[link]['t_proc'] for link in net_attr)
-        
-        task_var = {k: {'priority': 0, 'e2eD': 0, 'arr': 0, 'IT': 0, 'r': None} for k in task_attr}
+        t_proc_max = max([net_attr[link]['t_proc'] for link in net_attr])
+
+        task_var = {}
         for k in task_attr:
-            task_attr[k]['paths'] = utils.find_all_paths(net, task_attr[k]['src'], task_attr[k]['dst'])
-            task_var[k]['priority'] = max(len(x) for x in task_attr[k]['paths'])
+            task_var.setdefault(k, {})
+            task_var[k]['priority'] = 0
+            task_var[k]['e2eD'] = 0
+            task_var[k]['arr'] = 0
+            task_var[k]['IT'] = 0
+            task_var[k]['r'] = None
+            paths = utils.find_all_paths(net, task_attr[k]['src'],
+                                         task_attr[k]['dst'])
+            task_attr[k]['paths'] = paths
+            task_var[k]['priority'] = max([len(x) for x in paths])
 
-        task_order = sorted(task_attr.keys(), key=lambda x: task_var[x]['priority'], reverse=True)
-
-        # 更新：为每个任务的路径选择添加逻辑
-        num_paths_per_task = [len(task_attr[task]['paths']) for task in task_order]
-        total_num_choices = sum(num_paths_per_task)  # 总路径选择数
-
-        pop_size = 1  # 更新：种群大小
-        num_generations = 1  # 更新：代数
-
-        toolbox = base.Toolbox()
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-        creator.create("Individual", list, fitness=creator.FitnessMin)
-        task_paths = {
-            task: utils.find_all_paths(net, task_attr[task]['src'], task_attr[task]['dst'])
-            for task in task_attr
-        }
-
-        num_paths_per_task = {task: len(paths) for task, paths in task_paths.items()}
-
-        # 更新：为每个任务定义属性
-        def create_individual():
-            start_times = [random.randint(0, task_attr[task]['period'] - 1) for task in task_order]  # 生成起始时间
-            # 生成每个任务的路径索引，确保索引在有效范围内
-            path_indices = [random.randint(0, len(task_attr[task]['paths']) - 1) for task in task_order]
-            return creator.Individual(start_times + path_indices)
-
-        toolbox.register("individual", create_individual)
-        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+        task_order = sorted(list(task_attr.keys()),
+                            key=lambda x: task_var[x]['priority'],
+                            reverse=True)
+        
+        task_paths = {task: utils.find_all_paths(net, task_attr[task]['src'], task_attr[task]['dst']) for task in task_order}
+        print(task_paths)
         GCL = {}
         OFFSET = {}
         ARVT = {}
         for link in link_to_index:
             GCL.setdefault(link, [])
-        # 更新：评估函数
-        def evaluate(individual):
-            GCL.clear()
-            for link in link_to_index: GCL.setdefault(link, [])
-            OFFSET.clear()
-            ARVT.clear()
-            start_time_choices = individual[:len(task_order)]
-            path_indices = individual[len(task_order):]
 
-            total_delay = 0  # 初始化总延迟为0
-
-            for i, task in enumerate(task_order):
-                path_index = path_indices[i]
-                # 确保路径索引不会超出范围
-                if path_index >= len(task_paths[task]):
-                    print(f"Error: Path index {path_index} out of range for task {task} with {len(task_paths[task])} paths.")
-                    return float('inf'),
-                # 调用Scheduler
-                success = Scheduler(task, start_time_choices[i], path_indices[i])
-                if not success:
-                    return float('inf'),  # 无法调度
-                
-                # 计算并累加每个任务的延迟
-                task_delay = ARVT[task] - OFFSET[task]
-                total_delay += task_delay
-
-            # 将延迟总和作为评估结果
-            print(f"Total delay: {total_delay}")
-            return 1/total_delay,
+        # Genetic Algorithm parameters
+        pop_size = 1
+        num_generations = 1
+        start_time_choices_length = len(task_order)  # Number of start time options for each task
+        toolbox = base.Toolbox()
         
-        '''
+        # Define a single objective fitness function
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+        creator.create("Individual", list, fitness=creator.FitnessMin)
+
+        # Define the individual (each individual represents start time choices for all tasks)
+        toolbox.register("attr_bool", random.randint, 0, task_attr[task_order[0]]['period'])
+        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=start_time_choices_length)
+        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+
+        # Define the evaluation function
         def evaluate(individual):
-            GCL.clear()
-            for link in link_to_index: GCL.setdefault(link, [])
+            GCL.clear()        
+            for link in link_to_index:
+                GCL.setdefault(link, [])
             OFFSET.clear()
             ARVT.clear()
-            start_time_choices = individual[:len(task_order)]
-            path_indices = individual[len(task_order):]
-            for i, task in enumerate(task_order):
-                path_index = path_indices[i]
-                # 确保路径索引不会超出范围
-                if path_index >= len(task_paths[task]):
-                    print(f"Error: Path index {path_index} out of range for task {task} with {len(task_paths[task])} paths.")
-                    return float('inf'),
-                # 此时可以安全地调用Scheduler
-                if not Scheduler(task, start_time_choices[i], path_indices[i]):
-                    return float('inf'),  # 无法调度
+            start_time_choices = individual
+            for task in task_order:
+                success = Scheduler(task, start_time_choices)
+                if not success:
+                    return float('inf'),  # Return infinite fitness if a schedule is infeasible
+            # Calculate makespan as the difference between maximum ARVT and minimum OFFSET
             makespan = max(ARVT.values()) - min(OFFSET.values())
-            return 1 / makespan,
-        '''
+            return 1/makespan,
+    
+
         toolbox.register("evaluate", evaluate)
         toolbox.register("mate", tools.cxTwoPoint)
-        toolbox.register("mutate", tools.mutUniformInt, low=0, up=max(task_attr[task_order[0]]['period'], max(num_paths_per_task)-1), indpb=0.05)
+        toolbox.register("mutate", tools.mutUniformInt, low=0, up=task_attr[task_order[0]]['period'], indpb=0.05)
         toolbox.register("select", tools.selTournament, tournsize=3)
 
+        # Create an initial population of individuals
         pop = toolbox.population(n=pop_size)
 
+        # Run the genetic algorithm
         for gen in range(num_generations):
             offspring = algorithms.varAnd(pop, toolbox, cxpb=0.5, mutpb=0.2)
             fits = toolbox.map(toolbox.evaluate, offspring)
-            for fit, ind in zip(fits, offspring): ind.fitness.values = fit
+            for fit, ind in zip(fits, offspring):
+                ind.fitness.values = fit
             pop = toolbox.select(offspring, k=len(pop))
-
+            
+            # Print the best individual and its fitness value in the current generation
             best_ind = tools.selBest(pop, k=1)[0]
             print(f"Generation {gen}: Best start time choices: {best_ind}, Best makespan: {1/best_ind.fitness.values[0]}")
 
+        # Retrieve the best individual and its fitness value
         best_ind = tools.selBest(pop, k=1)[0]
-        print(f"Best overall start time choices: {best_ind}, Best overall makespan: {1/best_ind.fitness.values[0]}")
+        best_makespan = best_ind.fitness.values[0]
 
-        # 运行最佳个体的调度以生成最终的调度结果
-        start_time_choices = best_ind[:len(task_order)]
-        path_indices = best_ind[len(task_order):]
-        GCL.clear()
-        for link in link_to_index: GCL.setdefault(link, [])
+        # Use the best individual to schedule tasks
+        start_time_choices = best_ind
+        GCL.clear()        
+        for link in link_to_index:
+            GCL.setdefault(link, [])
         OFFSET.clear()
         ARVT.clear()
-        for i, task in enumerate(task_order):
-            success = Scheduler(task, start_time_choices[i], path_indices[i])
+        for task in task_order:
+            success = Scheduler(task, start_time_choices)
             if not success:
                 return utils.rprint(piid, 'infeasible', 0)  # Return infeasible if unable to schedule
             if ARVT[task] - OFFSET[task] > utils.t_limit:
