@@ -1,0 +1,26 @@
+[
+  {
+    "event": "+10 (round\u00a01)",
+    "resched_ms": 191.29,
+    "SR": 1.0,
+    "delta_delay": -4.23
+  },
+  {
+    "event": "+10 (round\u00a02)",
+    "resched_ms": 245.0,
+    "SR": 1.0,
+    "delta_delay": -7.25
+  },
+  {
+    "event": "+10 (round\u00a03)",
+    "resched_ms": 268.44,
+    "SR": 1.0,
+    "delta_delay": -10.12
+  },
+  {
+    "event": "\u201114 (20\u202f%)",
+    "resched_ms": 233.39,
+    "SR": 1.0,
+    "delta_delay": -4.75
+  }
+]
