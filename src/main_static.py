@@ -25,15 +25,15 @@ BASELINES: Dict[str, Tuple[str, str | None]] = {
     "2PDGA"      : ("two_phase_dga",          "TwoPhaseDGA"),
     "GA_fast"    : ("GA_fast.GA_fast",        "GA"),
     "ACCESS2020" : ("ACCESS2020.ACCESS2020",  None),
-    "ASPDAC2022" : ("ASPDAC2022.ASPDAC2022",  None),
+   # "ASPDAC2022" : ("ASPDAC2022.ASPDAC2022",  None),
     "RTNS2021"   : ("RTNS2021.RTNS2021",      None),
     "RTAS2020"   : ("RTAS2020.RTAS2020",      None),
     "SIGBED2019" : ("SIGBED2019.SIGBED2019",  None),
 }
 
 # ────────── topo/flow 參數 ────────────────────────────────────────────────
-NODES      = 60
-FLOWS      = 120
+NODES      = 10
+FLOWS      = 20
 T_PROC_NS  = 600
 PROP_NS    = 100
 RATE_BPS   = 100_000_000

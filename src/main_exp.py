@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore")
 # ─── 1. Algorithm registry (key → module path) ───────────────────────────────
 FUNC: Dict[str, str] = {
     "GA_fast":        "GA_fast.GA_fast",       # Phase I GA_fast
-    "GA":             "GA.GA",
+#    "GA":             "GA.GA",
     "RTAS2018":       "RTAS2018.RTAS2018",
     "RTAS2020":       "RTAS2020.RTAS2020",
     "ACCESS2020":     "ACCESS2020.ACCESS2020",
